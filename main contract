@@ -1,0 +1,130 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+import "./crowdfund.sol";
+
+contract tech4dev{
+
+event launch(uint id,address indexed creator,uint goal,uint32 startAt,uint32 endAt); // to 
+
+event cancel(uint id);
+
+event pledge(uint indexed id,address indexed caller,uint amount); // to contribute to the campaign
+
+event Unpledge(uint indexed id, address indexed caller, uint amount); // if change our mind about pledging
+
+event Claim(uint id); // to get claim all what was realised
+    
+event Refund(uint id, address indexed caller, uint amount); // if the goal is not meant
+
+struct Campaign{  // allows you to create more complicated data types that have multiple properties
+    address creator;
+    uint goal;
+    uint pledged;
+    uint32 startAt;
+    uint32 endAt;
+    bool claimed; //by default bool is false
+
+}
+
+
+  IERC20 public immutable token; //making reference to the erc20 token
+//state variable to capture count later on
+  uint public count; // used to generate id for new campaigns/ total counts of campaign created
+
+  mapping(uint => Campaign) public campaigns; // id of campaign that is created
+  mapping(uint => mapping(address => uint)) public pledgedAmount; // Mapping from campaign id => pledger => amount pledged
+  //adress of the person that want to pledge
+  
+  constructor(address _token){ // to take the address of the token as an input
+  token = IERC20(_token); //Address taken into the token
+
+  }
+
+function Launch(uint _goal, uint32 _startAt, uint32 _endAt) external { // what we need to launch a campaign, the gaol, starttime and endtime
+require(_startAt >= block.timestamp, "startAt < now"); // getting to input the time to kickoff the campaign
+require(_endAt >= _startAt, "endAt < startAt"); //to input the endat
+require(_endAt <= block.timestamp + 90 days, "endAt > max duration"); // 
+
+count +=1; //add the total campaign we launch
+
+campaigns[count] = Campaign(msg.sender, _goal, 0, _startAt, _endAt, false); // the 
+
+emit launch(count, msg.sender, _goal, _startAt, _endAt); //broadcast the event
+
+
+}
+
+function Cancel(uint _id) external  { //to be able to cancel the campaign if you are no longer intersted to start it up
+//struct,the second is the variable and equal to our mapping then id to use for cancelling
+Campaign memory campaign = campaigns[_id]; // map the id of the campaign
+require(campaign.creator == msg.sender, "you are not the creator"); //to verify the creator address
+require(block.timestamp < campaign.startAt, "The campaign has started"); // to be sure the campaign has to started
+
+delete campaigns[_id]; //
+emit cancel(_id);   // broadcast 
+
+}
+
+function Pledge(uint _id, uint _amount) external{ //brought our struck in here
+Campaign storage campaign = campaigns[_id];    //help to pledge in a running campaign / to store the id of campaign running
+require(block.timestamp >= campaign.startAt, "campaign has not started"); // to know if the campaign has started, to be sure 
+require(block.timestamp <= campaign.endAt, "campaign has ended"); //when you are ending the campaign to know if it is still running.to be sure
+
+campaign.pledged += _amount; //total amount pledged + adding amount pledged
+pledgedAmount[_id][msg.sender] += _amount; // campaign id and the address of the person caling the contract, then adding the amount by a specific address
+token.transferFrom(msg.sender, address(this), _amount); //token is from the erc20 token.
+emit pledge(_id, msg.sender, _amount); //
+}
+
+
+function unpledge(uint _id, uint _amount) external { //taking in 2 inputs id and amount you want to remove
+  Campaign storage campaign = campaigns[_id]; //
+  require(block.timestamp <= campaign.endAt, "Campaign has ended"); //to be sure the campaign has not ended
+  campaign.pledged -= _amount; // deducting from the amount pledged
+  pledgedAmount[_id][msg.sender] -= _amount; 
+  token.transfer(msg.sender, _amount); // 
+  emit Unpledge(_id, msg.sender, _amount);
+
+}
+
+
+function claim(uint _id) external { //taking in the id of the campaign
+Campaign storage campaign = campaigns[_id]; //getting access to struct on storega
+require(campaign.creator == msg.sender, "You are not the owner"); //allow us to take the struck value and manipulate it.
+require(block.timestamp > campaign.endAt, "campaign has not ended"); //making sure the campaign has ended before the claim
+require(campaign.pledged >= campaign.goal, "pledged < goal"); //to check if the goal is exceeded
+require(!campaign.claimed, "Campaign has been claimed"); //require that the campaign has not been claimed
+
+campaign.claimed = true;  //you have not claimed the transfer before
+token.transfer(campaign.creator,campaign.pledged); //to claim the amount gathered
+emit Claim(_id); // broadcast the id to claim the campaign to the frontend
+
+}
+
+function refund(uint _id) external { //amount not used, returning everything
+Campaign memory campaign = campaigns[_id]; // not storing anything
+require(block.timestamp > campaign.endAt, "It has not ended"); // if the campaign has not ended there will be no refund
+require(campaign.pledged < campaign.goal, "pledged >= gaol"); //to check if the 
+ 
+ uint balance = pledgedAmount[_id][msg.sender]; //capturing the amount that was pledged and to be collected
+ pledgedAmount[_id][msg.sender] = 0; // nullifying you don't have money with the campaign again
+ token.transfer(msg.sender, balance); //tranferred the amount to the person address
+ emit Refund(_id, msg.sender, balance); //broadcast to the frontend
+
+}
+
+}
+
+
+
+
+
+
+
+
+
+
+     
+
+
+
